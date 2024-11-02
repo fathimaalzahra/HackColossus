@@ -1,0 +1,75 @@
+import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import time
+import threading
+import sys
+# Configuration
+THINGSPEAK_CHANNEL_ID = '2656160'
+THINGSPEAK_API_KEY = 'BQ6QDDN15ZEBBDKN'
+EMAIL_ADDRESS = 'webuildpro24@gmail.com'
+EMAIL_PASSWORD = 'fqtz kgwh ptar tilq'
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 465
+TO_EMAIL_ADDRESS = 'kashvivp@gmail.com'
+# State to track the alert status
+alert_sent = False
+def fetch_thingspeak_data():
+    # URL to fetch data from both Field 1 and Field 2
+    url = f'https://api.thingspeak.com/channels/{THINGSPEAK_CHANNEL_ID}/feeds.json?api_key={THINGSPEAK_API_KEY}&results=1'
+    response = requests.get(url)
+    data = response.json()
+    return data
+def send_email_alert(subject, body):
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL_ADDRESS
+    msg['To'] = TO_EMAIL_ADDRESS
+    msg['Subject'] = subject
+    
+    msg.attach(MIMEText(body, 'plain'))
+    
+    try:
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_ADDRESS, TO_EMAIL_ADDRESS, msg.as_string())
+    except Exception as e:
+        print(f'Failed to send email: {e}')
+def check_and_alert():
+    global alert_sent
+    while True:
+        data = fetch_thingspeak_data()
+        if 'feeds' in data and len(data['feeds']) > 0:
+            feed = data['feeds'][0]
+            field1_value = feed.get('field1', '0')
+            field2_value = feed.get('field2', '0')
+            
+            if field1_value == '1' or field2_value == '1':
+                if not alert_sent:
+                    # Send alert if not already sent
+                    subject = 'Alert: Parameter Value Notification'
+                    body = f'Field 1 value: {field1_value}\nField 2 value: {field2_value}'
+                    send_email_alert(subject, body)
+                    alert_sent = True
+                else:
+                    # Re-send alert if condition persists and alert was previously sent
+                    subject = 'Reminder: Parameter Value Notification'
+                    body = f'Reminder: Field 1 value: {field1_value}\nField 2 value: {field2_value}'
+                    send_email_alert(subject, body)
+            else:
+                alert_sent = False
+        
+        time.sleep(10)  # Check every 10 seconds
+def listen_for_stop():
+    while True:
+        user_input = input()
+        if user_input.lower() == 'q':
+            print("Stopping the script.")
+            sys.exit()
+if __name__ == '__main__':
+    # Start the checking and alerting in a separate thread
+    alert_thread = threading.Thread(target=check_and_alert, daemon=True)
+    alert_thread.start()
+    
+    # Start listening for the 'q' keypress in the main thread
+    listen_for_stop()
