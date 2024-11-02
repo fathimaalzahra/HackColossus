@@ -1,0 +1,88 @@
+#include <LoRa.h>
+#include <ESP8266WiFi.h>
+#include "ThingSpeak.h"
+
+// LoRa module pins
+#define SS 15
+#define RST 16
+#define DIO0 5
+
+// ThingSpeak channel information
+const char* ssid = "SMILE"; 
+const char* password = "SMILE1234"; 
+WiFiClient client;
+unsigned long myChannelNumber = 2656160;  
+const char* myWriteAPIKey = "Q8AUN3SZ4KBQSI7H";   
+
+// Variables to hold LoRa data
+int f1 = 0;
+int f2 = 0;
+
+void connectToWiFi() {
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(ssid, password);
+
+  // Wait until the NodeMCU connects to Wi-Fi
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  // LoRa initialization
+  LoRa.setPins(SS, RST, DIO0);
+  if (!LoRa.begin(433E6)) {
+    Serial.println("LoRa Error");
+    while (1);
+  }
+
+  // Wi-Fi connection and ThingSpeak setup
+  connectToWiFi();
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  // LoRa reception logic
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    Serial.print("Receiving Data: ");
+    
+    // Retrieve the LoRa packet
+    while (LoRa.available()) {
+      String receivedData = LoRa.readString();
+      Serial.println(receivedData);
+
+      // Data split to extract f1 and f2 values
+      int separatorIndex = receivedData.indexOf(',');
+      f1 = receivedData.substring(0, separatorIndex).toInt();
+      f2 = receivedData.substring(separatorIndex + 1).toInt();
+
+      Serial.print("f1: ");
+      Serial.println(f1);
+      Serial.print("f2: ");
+      Serial.println(f2);
+    }
+
+    // f1 and f2 values sent to ThingSpeak
+    ThingSpeak.setField(1, f1);  // Send f1 to Field 1
+    ThingSpeak.setField(2, f2);  // Send f2 to Field 2
+
+
+    int result = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+    if (result == 200) {
+      Serial.println("Data successfully sent to ThingSpeak");
+    } else {
+      Serial.println("Error sending data to ThingSpeak: " + String(result));
+    }
+
+    delay(15000);  // Waits fr the ThingSpeak limit of 15 seconds
+  }
+}
