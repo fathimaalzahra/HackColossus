@@ -1,0 +1,89 @@
+#include <LoRa.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+ 
+  byte degree_symbol[8] =
+              {
+                0b00111,
+                0b00101,
+                0b00111,
+                0b00000,
+                0b00000,
+                0b00000,
+                0b00000,
+                0b00000
+              };
+ 
+// Pin definitions for LoRa module on Arduino Nano
+#define SS 10      // Default for SPI on Nano
+#define RST 9      // Reset pin (choose a free digital pin)
+#define DIO0 2     // Interrupt pin (choose a free digital pin)
+// Voltage sensor offset
+int offset = 20; // Set the correction offset value
+void setup() {
+  // Initialize pins for controlling LEDs (or other indicators)
+  pinMode(5, OUTPUT);
+  pinMode(6, OUTPUT);
+  lcd.init();
+ lcd.backlight();
+  // Initialize serial communication
+  Serial.begin(9600);
+  // LoRa setup
+  Serial.println("Sender Host");
+  LoRa.setPins(SS, RST, DIO0);
+  
+  if (!LoRa.begin(433E6)) {
+    Serial.println("LoRa Error");
+    delay(100);
+    while (1);
+  }
+}
+void loop() {
+  // Voltage detection for f1
+  int volt = analogRead(A0); // Read the input from analog pin A0
+  double voltage = map(volt, 0, 1023, 0, 2500) + offset; // Map 0-1023 to 0-2500 and add offset
+  voltage /= 100; // Divide by 100 to get decimal values
+  Serial.print("Voltage: ");
+  Serial.print(voltage); // Print the voltage
+  Serial.println("V");
+  int f1 = 0;
+  if (voltage < 3 || voltage > 5) {
+    f1 = 1; // Voltage out of range
+    digitalWrite(5, HIGH); // Turn on indicator
+  } else {
+    digitalWrite(5, LOW); // Turn off indicator
+  }
+  // Voltage detection for f2
+  int volt2 = analogRead(A1); // Read the input from analog pin A1
+  double voltu = map(volt2, 0, 1023, 0, 2500) + offset; // Map 0-1023 to 0-2500 and add offset
+  voltu /= 100; // Divide by 100 to get decimal values
+  Serial.print("Voltage2: ");
+  Serial.print(voltu); // Print the voltage
+  Serial.println("V");
+  int f2 = 0;
+  if (voltu < 3 || voltu > 5) {
+    f2 = 1; // Voltage out of range
+    digitalWrite(6, HIGH); // Turn on indicator
+  } else {
+    digitalWrite(6, LOW); // Turn off indicator
+  }
+ lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("pole1 stat:");
+  lcd.print(f1);
+   lcd.setCursor(0, 1);
+  lcd.print("pole2 stat:");
+  lcd.print(f2);
+  
+  
+  // Sending f1 and f2 values via LoRa
+  String dataToSend = String(f1) + "," + String(f2); // Create a string with f1 and f2 values
+  Serial.print("Sending Data: ");
+  Serial.println(dataToSend);
+  
+  LoRa.beginPacket();
+  LoRa.print(dataToSend);
+  LoRa.endPacket();
+  // Wait before the next iteration
+  delay(3000);
+}
